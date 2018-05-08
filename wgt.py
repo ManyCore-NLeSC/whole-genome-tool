@@ -10,19 +10,21 @@ import os.path
 import urlparse
 import pickle
 
+import numpy as np
 from mapraline import *
 from mapraline.component import PrositePatternAnnotator
 from praline import load_score_matrix, load_sequence_fasta, open_builtin
 from praline import write_alignment_clustal, write_alignment_fasta
 from praline.core import *
 from praline.container import TRACK_ID_INPUT, TRACK_ID_PREPROFILE
-from praline.container import ALPHABET_DNA, PlainTrack
+from praline.container import ALPHABET_DNA, PlainTrack, SequenceTree
 from praline.component import PairwiseAligner, ProfileBuilder
 from praline.component import GuideTreeBuilder, TreeMultipleSequenceAligner
 from praline.component import DummyMasterSlaveAligner
 from praline.util import run, write_log_structure
+from praline.util import HierarchicalClusteringAlgorithm
 
-from newick import newick_parser
+from newick import get_tree, tree_distance
 
 ROOT_TAG = "__ROOT__"
 _TRACK_ID_BASE_PATTERN = "mapraline.track.MotifAnnotationPattern"
@@ -290,11 +292,19 @@ def do_multiple_sequence_alignment(args, env, manager, seqs,
         guide_tree = outputs['guide_tree']
     else:
         # Read guide tree and convert it into PRALINE format
-        with open_resource(args.tree_file) as f:
-            root_node = newick_parser.parse_string(f.read())
+        with open_resource(args.tree_file, 'trees') as f:
+            tree = get_tree(f.read())
 
-        guide_tree = None
+        labels = [seq.name.split(':')[0].lower() for seq in seqs]
+        d = np.zeros((len(labels), len(labels)), dtype=np.float32)
+        for n, label_one in enumerate(labels):
+            for m, label_two in enumerate(labels):
+                if n == m:
+                    continue
+                d[n, m] = tree_distance(tree, label_one, label_two)
 
+        hc = HierarchicalClusteringAlgorithm(d)
+        guide_tree = SequenceTree(seqs, list(hc.merge_order('average')))
 
     # Build MSA
     component = TreeMultipleSequenceAligner
@@ -371,7 +381,7 @@ def parse_args():
                     help="read motif annotation tracks from a FASTA file " \
                          "(specify a number after a colon to override " \
                          "the global match boost score)")
-    parser.add_argument("--tree-file", default=None
+    parser.add_argument("--tree-file", default=None,
                         help="read the tree defining the join order from a " \
                              "file (in newick format)")
 
