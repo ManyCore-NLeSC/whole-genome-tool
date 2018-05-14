@@ -1,3 +1,4 @@
 [
-  ["-p", "A-A-A-A:15", "--tree-file", "trees/species.nw", "input/wnt4_offset-1000.fasta", "output/wnt4_offset+1000.fa"]
+  ["-p", "A-A-A-A:15", "--tree-file", "trees/species.nw", "input/wnt4_offset-1000.fasta", "output/wnt4_offset+1000.fa"],
+  ["-p", "A-A-A-A:15", "--tree-file", "trees/species.nw", "input/wnt4_offset-1000.fasta", "output/test.fa"]
 ]
