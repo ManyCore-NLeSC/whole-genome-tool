@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import sys
 import argparse
 import os
@@ -9,6 +8,7 @@ import tarfile
 import os.path
 import urlparse
 import pickle
+import json
 
 import numpy as np
 from mapraline import *
@@ -30,20 +30,83 @@ ROOT_TAG = "__ROOT__"
 _TRACK_ID_BASE_PATTERN = "mapraline.track.MotifAnnotationPattern"
 _TRACK_ID_BASE_FILE = "mapraline.track.MotifAnnotationFile"
 
-def main():
-    # Parse arguments.
-    args = parse_args()
-    verbose = not args.quiet or args.verbose
+_unicode_to_str = lambda l: [x.encode('ascii') for x in l]
 
-    alphabet = ALPHABET_DNA
+def main():
+    with open(sys.argv[1], 'rb') as jobfile:
+        jobs = [_unicode_to_str(job) for job in json.load(jobfile)]
 
     # Setup the execution manager.
     index = TypeIndex()
     index.autoregister()
-    if args.num_threads > 1:
-        manager = ParallelExecutionManager(index, args.num_threads)
-    else:
-        manager = Manager(index)
+    manager = Manager(index)
+
+    parser = args_parser()
+
+    root_node = TaskNode(ROOT_TAG)
+
+    # Create all MSA inputs
+    msa_inputs = []
+    for job in jobs:
+        args = parser.parse_args(job)
+        env, seqs, msa_track_id_sets, score_matrices = create_msa_input(job,
+                                                                        args,
+                                                                        manager,
+                                                                        root_node)
+        msa_inputs.append((args, env, seqs, msa_track_id_sets, score_matrices))
+
+    # Do multiple sequence alignment from preprofile-annotated sequences.
+    alignments = do_multiple_sequence_alignments(manager, root_node, msa_inputs)
+
+    for msa_input, alignment in zip(msa_inputs, alignments):
+        args, env, seqs, msa_track_id_sets, score_matrices = msa_input
+
+        # Write alignment to output file.
+        outfmt = args.output_format
+        if outfmt == 'fasta':
+            write_alignment_fasta(args.output, alignment, TRACK_ID_INPUT)
+        elif outfmt == "clustal":
+            write_alignment_clustal(args.output, alignment, TRACK_ID_INPUT,
+                                    score_matrix)
+        else:
+            raise DataError("unknown output format: '{0}'".format(outfmt))
+
+        # Dump pickled alignment object if user asked for it.
+        if args.dump_alignment is not None:
+            with file(args.dump_alignment, 'wb') as fo:
+                pickle.dump(alignment, fo)
+
+        if args.dump_all_tracks is not None:
+            try:
+                os.mkdir(args.dump_all_tracks)
+            except OSError:
+                pass
+
+            all_trids = []
+            for trid, track in alignment.items[0].tracks:
+                if track.tid == PlainTrack.tid:
+                    all_trids.append(trid)
+
+            for trid in all_trids:
+                filename = "dump-{0}.aln".format(trid)
+                path = os.path.join(args.dump_all_tracks, filename)
+
+                if outfmt == "fasta":
+                    write_alignment_fasta(path, alignment, trid)
+                elif outfmt == "clustal":
+                    write_alignment_clustal(path, alignment, trid, None)
+                else:
+                    raise DataError("unknown output format: '{0}'".format(outfmt))
+
+    # Collect log bundles
+    if args.debug > 0:
+        write_log_structure(root_node)
+
+
+
+def create_msa_input(job, args, manager, root_node):
+    verbose = False
+    alphabet = ALPHABET_DNA
 
     seqs = load_sequence_fasta(args.input, alphabet)
 
@@ -64,10 +127,7 @@ def main():
     keys['debug'] = args.debug
     keys['merge_mode'] = 'global'
     keys['dist_mode'] = 'global'
-    if args.no_accelerate:
-        keys['accelerate'] = False
-    else:
-        keys['accelerate'] = True
+    keys['accelerate'] = True
     env = Environment(keys=keys)
 
     # Initialize root node for output
@@ -118,54 +178,8 @@ def main():
                    verbose, root_node)
     msa_track_id_sets = _replace_input_track_id(track_id_sets)
 
-    # Do multiple sequence alignment from preprofile-annotated sequences.
-    alignment = do_multiple_sequence_alignment(args, env, manager, seqs,
-                                               msa_track_id_sets, score_matrices,
-                                               verbose, root_node)
+    return env, seqs, msa_track_id_sets, score_matrices
 
-    # Write alignment to output file.
-    outfmt = args.output_format
-    if outfmt == 'fasta':
-        write_alignment_fasta(args.output, alignment, TRACK_ID_INPUT)
-    elif outfmt == "clustal":
-        write_alignment_clustal(args.output, alignment, TRACK_ID_INPUT,
-                                score_matrix)
-    else:
-        raise DataError("unknown output format: '{0}'".format(outfmt))
-
-    # Dump pickled alignment object if user asked for it.
-    if args.dump_alignment is not None:
-        with file(args.dump_alignment, 'wb') as fo:
-            pickle.dump(alignment, fo)
-
-    if args.dump_all_tracks is not None:
-        try:
-            os.mkdir(args.dump_all_tracks)
-        except OSError:
-            pass
-
-        all_trids = []
-        for trid, track in alignment.items[0].tracks:
-            if track.tid == PlainTrack.tid:
-                all_trids.append(trid)
-
-        for trid in all_trids:
-            filename = "dump-{0}.aln".format(trid)
-            path = os.path.join(args.dump_all_tracks, filename)
-
-            if outfmt == "fasta":
-                write_alignment_fasta(path, alignment, trid)
-            elif outfmt == "clustal":
-                write_alignment_clustal(path, alignment, trid, None)
-            else:
-                raise DataError("unknown output format: '{0}'".format(outfmt))
-
-    if verbose:
-        sys.stdout.write('\n')
-
-    # Collect log bundles
-    if args.debug > 0:
-        write_log_structure(root_node)
 
 def _replace_input_track_id(track_id_sets):
     new_track_id_sets = []
@@ -272,51 +286,53 @@ def do_master_slave_alignments(args, env, manager, seqs,
     return master_slave_alignments
 
 
-def do_multiple_sequence_alignment(args, env, manager, seqs,
-                                   track_id_sets, score_matrices,
-                                   verbose, root_node):
-    # Dummy preprofiles, so we can safely align by sequence.
-    sub_env = Environment(parent=env)
-    sub_env.keys['squash_profiles'] = True
+def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
+    alignments = []
+    for msa_input in msa_inputs:
+        args, env, seqs, track_id_sets, score_matrices = msa_input
+        sub_env = Environment(parent=env)
+        sub_env.keys['squash_profiles'] = True
 
-    if args.tree_file is None:
-        # Build guide tree
-        component = GuideTreeBuilder
+        if args.tree_file is None:
+            # Build guide tree
+            component = GuideTreeBuilder
+            execution = Execution(manager, ROOT_TAG)
+            task = execution.add_task(component)
+            task.environment(sub_env)
+            task.inputs(sequences=seqs, track_id_sets=track_id_sets,
+                        score_matrices=score_matrices)
+
+            outputs = run(execution, verbose=False, root_node=root_node)[0]
+            guide_tree = outputs['guide_tree']
+        else:
+            # Read guide tree and convert it into PRALINE format
+            with open_resource(args.tree_file, 'trees') as f:
+                tree = get_tree(f.read())
+
+            labels = [seq.name.split(':')[0].lower() for seq in seqs]
+            d = np.zeros((len(labels), len(labels)), dtype=np.float32)
+            for n, label_one in enumerate(labels):
+                for m, label_two in enumerate(labels):
+                    if n == m:
+                        continue
+                    d[n, m] = tree_distance(tree, label_one, label_two)
+
+            hc = HierarchicalClusteringAlgorithm(d)
+            guide_tree = SequenceTree(seqs, list(hc.merge_order('average')))
+
+        # Build MSA
+        component = TreeMultipleSequenceAligner
         execution = Execution(manager, ROOT_TAG)
         task = execution.add_task(component)
-        task.environment(sub_env)
-        task.inputs(sequences=seqs, track_id_sets=track_id_sets,
-                    score_matrices=score_matrices)
+        task.environment(env)
+        task.inputs(sequences=seqs, guide_tree=guide_tree,
+                    track_id_sets=track_id_sets, score_matrices=score_matrices)
 
-        outputs = run(execution, verbose=verbose, root_node=root_node)[0]
-        guide_tree = outputs['guide_tree']
-    else:
-        # Read guide tree and convert it into PRALINE format
-        with open_resource(args.tree_file, 'trees') as f:
-            tree = get_tree(f.read())
+        outputs = run(execution, verbose=False, root_node=root_node)[0]
 
-        labels = [seq.name.split(':')[0].lower() for seq in seqs]
-        d = np.zeros((len(labels), len(labels)), dtype=np.float32)
-        for n, label_one in enumerate(labels):
-            for m, label_two in enumerate(labels):
-                if n == m:
-                    continue
-                d[n, m] = tree_distance(tree, label_one, label_two)
+        alignments.append(outputs['alignment'])
 
-        hc = HierarchicalClusteringAlgorithm(d)
-        guide_tree = SequenceTree(seqs, list(hc.merge_order('average')))
-
-    # Build MSA
-    component = TreeMultipleSequenceAligner
-    execution = Execution(manager, ROOT_TAG)
-    task = execution.add_task(component)
-    task.environment(env)
-    task.inputs(sequences=seqs, guide_tree=guide_tree,
-                track_id_sets=track_id_sets, score_matrices=score_matrices)
-
-    outputs = run(execution, verbose=verbose, root_node=root_node)[0]
-
-    return outputs['alignment']
+    return alignments
 
 
 def do_preprofiles(args, env, manager, alignments, seqs, verbose, root_node):
@@ -334,7 +350,7 @@ def do_preprofiles(args, env, manager, alignments, seqs, verbose, root_node):
 def pair(arg):
     return arg.split(":")
 
-def parse_args():
+def args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("input", help="input file in FASTA format")
     parser.add_argument("output", help="output alignment")
@@ -351,18 +367,12 @@ def parse_args():
     parser.add_argument("-m", "--score-matrix",
                         help="score matrix to use for alignment",
                         default=None, dest="score_matrix")
-    parser.add_argument("-t", "--threads", help="number of threads to use",
-                        default=1,
-                        dest="num_threads", type=int)
     parser.add_argument("-s", "--preprofile-score", default=None,
                         dest="preprofile_score", type=float,
                         help="exclude preprofile alignments by score")
     parser.add_argument("-f", "--output-format", default="fasta",
                         dest="output_format",
                         help="write the alignment in the specified format")
-    parser.add_argument("--no-accelerate", default=False,
-                        dest="no_accelerate", action="store_true",
-                        help="disable the fast pairwise aligner")
     parser.add_argument("--debug", "-d", action="count", dest="debug",
                         default=0, help="enable debugging output")
     parser.add_argument("--dump-alignment-obj", type=str, default=None,
@@ -385,13 +395,7 @@ def parse_args():
                         help="read the tree defining the join order from a " \
                              "file (in newick format)")
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("-v", "--verbose", dest="verbose", help="be verbose",
-                        action="store_true", default=False)
-    group.add_argument("-q", "--quiet", dest="quiet", help="be quiet",
-                       action="store_true", default=True)
-
-    return parser.parse_args()
+    return parser
 
 def open_resource(filename, prefix):
     try:
