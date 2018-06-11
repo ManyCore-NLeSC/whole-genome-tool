@@ -15,6 +15,8 @@ class ConstellationManager(Manager):
                 for message in gen:
                     yield message
 
+                return
+
             # We want to intercept execution of these tasks and send them off
             # to constellation. First pass a message saying we've begun
             # executing the tasks.
