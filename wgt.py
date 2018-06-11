@@ -25,12 +25,15 @@ from praline.util import run, write_log_structure
 from praline.util import HierarchicalClusteringAlgorithm
 
 from newick import get_tree, tree_distance
+from manager import ConstellationManager
 
 ROOT_TAG = "__ROOT__"
 _TRACK_ID_BASE_PATTERN = "mapraline.track.MotifAnnotationPattern"
 _TRACK_ID_BASE_FILE = "mapraline.track.MotifAnnotationFile"
 
 _unicode_to_str = lambda l: [x.encode('ascii') for x in l]
+
+
 
 def main():
     with open(sys.argv[1], 'rb') as jobfile:
@@ -39,7 +42,7 @@ def main():
     # Setup the execution manager.
     index = TypeIndex()
     index.autoregister()
-    manager = Manager(index)
+    manager = ConstellationManager(index)
 
     parser = args_parser()
 
