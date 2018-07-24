@@ -27,6 +27,7 @@ from praline.util import HierarchicalClusteringAlgorithm
 from newick import get_tree, tree_distance
 from manager import ConstellationManager
 
+
 ROOT_TAG = "__ROOT__"
 _TRACK_ID_BASE_PATTERN = "mapraline.track.MotifAnnotationPattern"
 _TRACK_ID_BASE_FILE = "mapraline.track.MotifAnnotationFile"
@@ -290,7 +291,7 @@ def do_master_slave_alignments(args, env, manager, seqs,
 
 
 def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
-    alignments = []
+    msa_execution = Execution(manager, ROOT_TAG)
     for msa_input in msa_inputs:
         args, env, seqs, track_id_sets, score_matrices = msa_input
         sub_env = Environment(parent=env)
@@ -325,15 +326,13 @@ def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
 
         # Build MSA
         component = TreeMultipleSequenceAligner
-        execution = Execution(manager, ROOT_TAG)
-        task = execution.add_task(component)
+        task = msa_execution.add_task(component)
         task.environment(env)
         task.inputs(sequences=seqs, guide_tree=guide_tree,
                     track_id_sets=track_id_sets, score_matrices=score_matrices)
 
-        outputs = run(execution, verbose=False, root_node=root_node)[0]
-
-        alignments.append(outputs['alignment'])
+    outputs = run(msa_execution, verbose=False, root_node=root_node)
+    alignments = [o['alignment'] for o in outputs]
 
     return alignments
 
