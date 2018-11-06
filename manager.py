@@ -17,9 +17,8 @@ import time
 
 
 from os.path import expanduser
-home = expanduser("~")
 
-with open(home + '/bowbeforeme', 'r') as myfile:
+with open(os.getenv("PRALINE_CASHMERE_DIR") + '/bowbeforeme', 'r') as myfile:
   host = myfile.read()
 
 SERVER = "http://" + host + ":4567"
