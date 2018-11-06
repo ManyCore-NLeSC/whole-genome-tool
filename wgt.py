@@ -35,6 +35,7 @@ _TRACK_ID_BASE_FILE = "mapraline.track.MotifAnnotationFile"
 _unicode_to_str = lambda l: [x.encode('ascii') for x in l]
 
 
+use_our_stuff = True
 
 def main():
     with open(sys.argv[1], 'rb') as jobfile:
@@ -61,6 +62,13 @@ def main():
 
     # Do multiple sequence alignment from preprofile-annotated sequences.
     alignments = do_multiple_sequence_alignments(manager, root_node, msa_inputs)
+    print alignments
+    if(use_our_stuff):
+        alignments[0].start_compute()
+        alignments_real = []
+        for i in alignments:
+            alignments_real.append(alignments.get_res())
+
 
     for msa_input, alignment in zip(msa_inputs, alignments):
         args, env, seqs, msa_track_id_sets, score_matrices = msa_input
@@ -331,8 +339,14 @@ def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
         task.inputs(sequences=seqs, guide_tree=guide_tree,
                     track_id_sets=track_id_sets, score_matrices=score_matrices)
 
-    outputs = run(msa_execution, verbose=False, root_node=root_node)
-    alignments = [o['alignment'] for o in outputs]
+        
+        if use_our_stuff:
+            outputs = run(execution, verbose=False, root_node=root_node)[0]
+            print outputs
+            alignments.append(outputs)
+        else : 
+            outputs = run(execution, verbose=False, root_node=root_node)[0]
+            alignments.append(outputs['alignment'])
 
     return alignments
 
