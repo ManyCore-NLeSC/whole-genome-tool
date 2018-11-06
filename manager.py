@@ -9,13 +9,18 @@ from praline.container import SequenceTree, Alignment
 from praline.component import PairwiseAligner
 from praline.util import auto_align_mode
 import numpy as np
-
+import os
 import requests
 import time
 
-SERVER = "http://localhost:4567"
+SERVER = "http://node024:4567"
+home=os.getenv("HOME")
 
-use_our_stuff = False
+with open (home + "/bowbeforeme", "r") as myfile:
+    data=myfile.readlines()
+SERVER="http://" + data[0] + ":4567"
+
+use_our_stuff = True
 
 _INTERCEPT_TIDS = {TreeMultipleSequenceAligner.tid}
 
