@@ -13,12 +13,17 @@ import os
 import requests
 import time
 
-SERVER = "http://node024:4567"
-home=os.getenv("HOME")
 
-with open (home + "/bowbeforeme", "r") as myfile:
-    data=myfile.readlines()
-SERVER="http://" + data[0] + ":4567"
+
+
+from os.path import expanduser
+home = expanduser("~")
+
+with open(home + '/bowbeforeme', 'r') as myfile:
+  host = myfile.read()
+
+SERVER = "http://" + host + ":4567"
+
 
 use_our_stuff = True
 
