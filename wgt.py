@@ -300,6 +300,7 @@ def do_master_slave_alignments(args, env, manager, seqs,
 
 def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
     msa_execution = Execution(manager, ROOT_TAG)
+    execution = Execution(manager, ROOT_TAG)
     for msa_input in msa_inputs:
         args, env, seqs, track_id_sets, score_matrices = msa_input
         sub_env = Environment(parent=env)
@@ -308,7 +309,7 @@ def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
         if args.tree_file is None:
             # Build guide tree
             component = GuideTreeBuilder
-            execution = Execution(manager, ROOT_TAG)
+            #execution = Execution(manager, ROOT_TAG)
             task = execution.add_task(component)
             task.environment(sub_env)
             task.inputs(sequences=seqs, track_id_sets=track_id_sets,
