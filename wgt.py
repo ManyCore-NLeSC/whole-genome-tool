@@ -35,7 +35,6 @@ _TRACK_ID_BASE_FILE = "mapraline.track.MotifAnnotationFile"
 _unicode_to_str = lambda l: [x.encode('ascii') for x in l]
 
 
-use_our_stuff = True
 
 def main():
     with open(sys.argv[1], 'rb') as jobfile:
@@ -62,13 +61,6 @@ def main():
 
     # Do multiple sequence alignment from preprofile-annotated sequences.
     alignments = do_multiple_sequence_alignments(manager, root_node, msa_inputs)
-    print alignments
-    if(use_our_stuff):
-        alignments[0].start_compute()
-        alignments_real = []
-        for i in alignments:
-            alignments_real.append(alignments.get_res())
-
 
     for msa_input, alignment in zip(msa_inputs, alignments):
         args, env, seqs, msa_track_id_sets, score_matrices = msa_input
@@ -300,7 +292,6 @@ def do_master_slave_alignments(args, env, manager, seqs,
 
 def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
     msa_execution = Execution(manager, ROOT_TAG)
-    execution = Execution(manager, ROOT_TAG)
     for msa_input in msa_inputs:
         args, env, seqs, track_id_sets, score_matrices = msa_input
         sub_env = Environment(parent=env)
@@ -309,7 +300,7 @@ def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
         if args.tree_file is None:
             # Build guide tree
             component = GuideTreeBuilder
-            #execution = Execution(manager, ROOT_TAG)
+            execution = Execution(manager, ROOT_TAG)
             task = execution.add_task(component)
             task.environment(sub_env)
             task.inputs(sequences=seqs, track_id_sets=track_id_sets,
@@ -340,14 +331,8 @@ def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
         task.inputs(sequences=seqs, guide_tree=guide_tree,
                     track_id_sets=track_id_sets, score_matrices=score_matrices)
 
-        
-        if use_our_stuff:
-            outputs = run(execution, verbose=False, root_node=root_node)[0]
-            print outputs
-            alignments.append(outputs)
-        else : 
-            outputs = run(execution, verbose=False, root_node=root_node)[0]
-            alignments.append(outputs['alignment'])
+    outputs = run(msa_execution, verbose=False, root_node=root_node)
+    alignments = [o['alignment'] for o in outputs]
 
     return alignments
 

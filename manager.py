@@ -16,7 +16,7 @@ import time
 
 
 
-from os.path import expanduser
+
 
 with open(os.getenv("PRALINE_CASHMERE_DIR") + '/bowbeforeme', 'r') as myfile:
   host = myfile.read()
