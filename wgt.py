@@ -313,7 +313,7 @@ def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
             with open_resource(args.tree_file, 'trees') as f:
                 tree = get_tree(f.read())
 
-            labels = [seq.name.split(':')[0].lower() for seq in seqs]
+            labels = [get_name(seq.name) for seq in seqs]
             d = np.zeros((len(labels), len(labels)), dtype=np.float32)
             for n, label_one in enumerate(labels):
                 for m, label_two in enumerate(labels):
@@ -336,6 +336,18 @@ def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
 
     return alignments
 
+def get_name_colon(seq):
+    return seq.split(':')[0].lower()
+
+
+def get_name_space(seq):
+    return seq.split(' ')[0].lower().replace('_', ' ')
+
+def get_name(seq):
+    if seq.find(':') >= 0:
+        return get_name_colon(seq)
+    else:
+        return get_name_space(seq)
 
 def do_preprofiles(args, env, manager, alignments, seqs, verbose, root_node):
     for i, alignment in enumerate(alignments):
