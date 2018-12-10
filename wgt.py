@@ -9,6 +9,7 @@ import os.path
 import urlparse
 import pickle
 import json
+import time
 
 import numpy as np
 from mapraline import *
@@ -48,7 +49,7 @@ def main():
     parser = args_parser()
 
     root_node = TaskNode(ROOT_TAG)
-
+    start = time.time()
     # Create all MSA inputs
     msa_inputs = []
     for job in jobs:
@@ -58,10 +59,12 @@ def main():
                                                                         manager,
                                                                         root_node)
         msa_inputs.append((args, env, seqs, msa_track_id_sets, score_matrices))
-
+    end = time.time()
+    print "Reading files took : " + (str(end - start)) + " seconds"
     # Do multiple sequence alignment from preprofile-annotated sequences.
     alignments = do_multiple_sequence_alignments(manager, root_node, msa_inputs)
 
+    start = time.time()
     for msa_input, alignment in zip(msa_inputs, alignments):
         args, env, seqs, msa_track_id_sets, score_matrices = msa_input
 
@@ -101,7 +104,8 @@ def main():
                     write_alignment_clustal(path, alignment, trid, None)
                 else:
                     raise DataError("unknown output format: '{0}'".format(outfmt))
-
+    end = time.time()
+    print "Writing files took : " + (str(end - start)) + " seconds"
     # Collect log bundles
     if args.debug > 0:
         write_log_structure(root_node)
@@ -291,6 +295,7 @@ def do_master_slave_alignments(args, env, manager, seqs,
 
 
 def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
+    start = time.time()
     msa_execution = Execution(manager, ROOT_TAG)
     for msa_input in msa_inputs:
         args, env, seqs, track_id_sets, score_matrices = msa_input
@@ -330,7 +335,8 @@ def do_multiple_sequence_alignments(manager, root_node, msa_inputs):
         task.environment(env)
         task.inputs(sequences=seqs, guide_tree=guide_tree,
                     track_id_sets=track_id_sets, score_matrices=score_matrices)
-
+    end = time.time()
+    print "Preparing : " + (str(end - start)) + " seconds"
     outputs = run(msa_execution, verbose=False, root_node=root_node)
     alignments = [o['alignment'] for o in outputs]
 

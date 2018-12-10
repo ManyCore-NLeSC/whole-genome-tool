@@ -151,8 +151,6 @@ def main():
     with open(sys.argv[1]) as f:
         root_node = get_tree(f.read())
 
-    print(tree_distance(root_node, 'pan troglodytes', 'homo sapiens'))
-    print(tree_distance(root_node, 'homo sapiens', 'pan troglodytes'))
 
 if __name__ == '__main__':
     main()

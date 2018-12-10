@@ -31,12 +31,9 @@ _INTERCEPT_TIDS = {TreeMultipleSequenceAligner.tid}
 class ConstellationManager(Manager):
     def execute_many(self, requestss, parent_tag):
 
-        print requestss
-        print "Hallo!"
         not_msa = not use_our_stuff
         for tid, inputs, tag, env in requestss:
           if not tid in _INTERCEPT_TIDS:
-            print tid
             not_msa = True
         if not_msa:
           gen = super(ConstellationManager, self).execute_many(requestss,parent_tag)
@@ -44,8 +41,8 @@ class ConstellationManager(Manager):
             yield message
 
           return
-        
-          
+        start = time.time()
+ 
         trees = []
             # We're not handling these tasks in this manager, so execute them
             # normally using the functionality of the superclass.
@@ -87,7 +84,7 @@ class ConstellationManager(Manager):
           
             
             data = ' '.join([str(i) + "," + str(j) for i, j in  tree.merge_orders])
-
+      
             start_gap, extend_gap = 0, 0
             if len(gap_series) == 2:
               start_gap, extend_gap = gap_series[0], gap_series[1]
@@ -106,15 +103,24 @@ class ConstellationManager(Manager):
                 sendSequence(treeName,i,[seq.get_track(t[0]) for t in track_id_sets],s)
             trees+=[treeName]
                
-                
+        end = time.time()
+        print "Sending jobs took " + (str(end - start)) + " seconds"
+        start = time.time()
         # for tree in trees:
         #  print(tree)
         requests.get(SERVER + "/processtrees")
+        
+        first = True
         for (tid, inputs, tag, env),tree in zip(requestss,trees):
            while True:
               req = requests.get(SERVER + "/retrieve/steps/" + tree)
               # print("not yet" + tree + " " + str(req.status_code))
               if req.status_code == 200:
+                  if first:
+                    end = time.time()
+                    print "Waiting for result " + (str(end - start)) + " seconds"
+                    start = end
+                    first = False
                   res = np.array([[int(d) for d in c.split(';')] for c in req.text.split(' ')])
                   outputs={}
                   outputs['alignment'] =Alignment(alignmentsi[0], res)
@@ -123,8 +129,8 @@ class ConstellationManager(Manager):
                   complete_message.tag = tag
                   yield complete_message
                   break
-       
-
+        end = time.time()
+        print "Obtaining results took " + (str(end - start)) + " seconds"
 
 
 def sendSequence(tree_name, leaf, tracks,s):
